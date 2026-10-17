@@ -810,6 +810,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .vpin{background:var(--accent);color:#fff;font:700 12px/1 system-ui,sans-serif;padding:5px 7px;border-radius:12px;border:2px solid #fff;box-shadow:0 1px 4px rgb(0 0 0 / .4);white-space:nowrap;cursor:pointer;text-align:center}
 .vpin:hover{transform:scale(1.15)}
 .leaflet-tooltip{font:13px system-ui,sans-serif}
+.pager{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:14px 0}.pbtns{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.pager .pill{min-width:40px;justify-content:center}.pager .pill[aria-current=page]{background:var(--accent);color:#fff;border-color:var(--accent)}.pager .pill:disabled{opacity:.35}.pager select{margin-left:6px;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:inherit}
 </style>
 </head>
 <body>
@@ -845,7 +846,9 @@ const WIN=[["all","Any dates"],["x26","Christmas 26/27"],["f27","Spring break 20
 const WINL={x26:"Open Christmas 2026/27",f27:"Open 20–28 Feb 2027",x27:"Open Christmas 2027/28",s28:"Open 26 Feb–5 Mar 2028"};
 const FACL={fireplace:["Fireplace or wood stove","🔥"],sauna:["Sauna","♨️"],toysIn:["Toys inside","🧸"],toysOut:["Toys outside or swings","🛝"],garden:["Garden","🌳"],bigGarden:["Large garden","🏡"]};
 const LANG={tr:"English (translated)",en:"English",fr:"Français",de:"Deutsch",it:"Italiano",nl:"Nederlands",es:"Español",sl:"Slovenščina"};
-const st={win:"all",bd:3,cap:10,n30:0,st:0,q:"",near:60,f:{},noq:false,sort:"score",open:false};
+let PER=10;try{PER=+localStorage.getItem("per")||10}catch(e){}
+let lastSig="";
+const st={pg:1,per:[10,20,50].includes(PER)?PER:10,win:"all",bd:3,cap:10,n30:0,st:0,q:"",near:60,f:{},noq:false,sort:"score",open:false};
 const byV=Object.fromEntries(H.map(h=>[h.v,h]));
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pc=m=>m<=15?"var(--green)":m<=30?"var(--blue)":m<=45?"var(--red)":"var(--black)";
@@ -875,8 +878,14 @@ function filtered(){
   const s=st.sort;
   L.sort(s==="near"?(a,b)=>a.near-b.near:s==="n30"?(a,b)=>b.n30-a.n30||a.near-b.near:s==="bd"?(a,b)=>b.bd-a.bd||b.score-a.score:s==="id"?(a,b)=>a.n-b.n:(a,b)=>b.score-a.score);
   return L}
+function pager(n,bottom){const P=Math.max(1,Math.ceil(n/st.per));if(!n)return"";
+  const a=(st.pg-1)*st.per+1,b=Math.min(n,st.pg*st.per);
+  const pages=[];for(let i=1;i<=P;i++){if(i===1||i===P||Math.abs(i-st.pg)<=1)pages.push(i);else if(pages[pages.length-1]!=="…")pages.push("…")}
+  return `<nav class="pager" aria-label="Pages"><span class="small">${a}–${b} of ${n}</span><div class="pbtns"><button type="button" class="pill" data-pg="${st.pg-1}" ${st.pg<=1?"disabled":""} aria-label="Previous page">‹</button>${pages.map(i=>i==="…"?'<span class="small">…</span>':`<button type="button" class="pill" data-pg="${i}" aria-current="${i===st.pg?"page":"false"}">${i}</button>`).join("")}<button type="button" class="pill" data-pg="${st.pg+1}" ${st.pg>=P?"disabled":""} aria-label="Next page">›</button></div>${bottom?"":`<label class="small">Per page <select class="per">${[10,20,50].map(v=>`<option ${v===st.per?"selected":""}>${v}</option>`).join("")}</select></label>`}</nav>`}
 function overview(){
   const L=filtered();
+  const sig=JSON.stringify([st.win,st.bd,st.cap,st.n30,st.st,st.q,st.near,st.f,st.noq,st.sort,st.per]);if(sig!==lastSig){if(lastSig)st.pg=1;lastSig=sig}
+  st.pg=Math.min(Math.max(1,st.pg),Math.max(1,Math.ceil(L.length/st.per)));
   document.title="Ski Week Stays";
   app.innerHTML=`
   <div class="top"><div class="topin">
@@ -900,7 +909,7 @@ function overview(){
    </div>
    <div class="head"><h2>${L.length} of ${H.length} homes</h2>
     <div class="legend">${SKI} Drive to ski area, Tue 23 Feb 2027 08:30: <span>${pst(10)} ≤15 min</span><span>${pst(25)} ≤30</span><span>${pst(40)} ≤45</span><span>${pst(55)} ≤60</span></div></div>
-   <div class="grid">${L.length?L.map(card).join(""):'<div class="empty">No homes match. Loosen the drive time, bedrooms or must-haves.</div>'}</div>
+   ${pager(L.length)}<div class="grid" id="grid">${L.length?L.slice((st.pg-1)*st.per,st.pg*st.per).map(card).join(""):'<div class="empty">No homes match. Loosen the drive time, bedrooms or must-haves.</div>'}</div>${pager(L.length,1)}
    <div class="method">
     <p><b>Match rating.</b> Points for 5+ bedrooms, sleeping 12+, ski areas within 30 minutes, fireplace, sauna, toys inside and outside, a (large) garden and a responsive, well-rated owner. 100 points = 5 stars.</p>
     <p><b>Drive times</b> are Google Maps traffic predictions (14 Oct 2026) for a weekday morning in February, from the home to the ski area's village, not to a specific lift. "Queue-prone" means the route uses a valley road known for holiday traffic.</p>
@@ -983,6 +992,8 @@ function bindOverview(){
   $("near").oninput=e=>{st.near=+e.target.value;rerender("near")};
   $("noq").onchange=e=>{st.noq=e.target.checked;rerender()};
   $("sort").onchange=e=>{st.sort=e.target.value;rerender()};
+  app.querySelectorAll("[data-pg]").forEach(b=>b.onclick=()=>{st.pg=+b.dataset.pg;overview();const g=$("grid");if(g)window.scrollTo(0,g.getBoundingClientRect().top+scrollY-120)});
+  app.querySelectorAll(".per").forEach(sl=>sl.onchange=()=>{st.per=+sl.value;try{localStorage.setItem("per",st.per)}catch(e){}rerender()});
   $("reset").onclick=()=>{Object.assign(st,{win:"all",bd:3,cap:10,n30:0,st:0,q:"",near:60,f:{},noq:false,sort:"score"});rerender()};
   app.querySelectorAll(".card").forEach(c=>{c.onclick=e=>{if(e.target.closest(".nav"))return;location.hash=c.dataset.go};c.onkeydown=e=>{if(e.key==="Enter")location.hash=c.dataset.go}});
   bindCars(false);hydrate();
@@ -1007,7 +1018,11 @@ $("lbx").onclick=closeLb;$("lbp").onclick=()=>$("lbt").scrollBy({left:-$("lbt").
 document.addEventListener("keydown",e=>{if(!$("lb").classList.contains("open"))return;if(e.key==="Escape")closeLb();if(e.key==="ArrowRight")$("lbn").click();if(e.key==="ArrowLeft")$("lbp").click()});
 const app=$("app");
 function route(){closeLb();const v=decodeURIComponent(location.hash.slice(1));if(v&&byV[v]){lastY=lastY||window.scrollY;detail(v)}else{overview();if(lastY){window.scrollTo(0,lastY);lastY=0}}}
-window.addEventListener("hashchange",route);route();
+let CRASH=null;try{const v=sessionStorage.getItem("alive");if(v&&!sessionStorage.getItem("clean"))CRASH=JSON.parse(v);sessionStorage.removeItem("clean")}catch(e){}
+function crumb(){try{sessionStorage.setItem("alive",JSON.stringify({at:location.hash||"list",pg:st.pg,per:st.per,ua:navigator.userAgent.slice(0,80),t:new Date().toISOString()}))}catch(e){}}
+addEventListener("pagehide",()=>{try{sessionStorage.setItem("clean","1")}catch(e){}});
+window.addEventListener("hashchange",()=>{route();crumb()});route();crumb();
+if(CRASH){const d=document.createElement("div");d.setAttribute("role","status");d.style.cssText="position:fixed;left:12px;right:12px;bottom:12px;z-index:90;background:#1c2320;color:#fff;padding:12px 14px;border-radius:12px;font:14px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgb(0 0 0/.3)";d.innerHTML="The page closed unexpectedly last time (at <b>"+String(CRASH.at).replace(/</g,"")+"</b>, "+CRASH.per+" per page). Please send Hubert a screenshot of this message. <button type=button style='margin-left:8px;border:0;border-radius:8px;padding:4px 10px'>OK</button>";d.querySelector("button").onclick=()=>d.remove();document.body.appendChild(d)}
 </script>
 </body>
 </html>
